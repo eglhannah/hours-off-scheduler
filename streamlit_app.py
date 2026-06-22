@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 import pulp
 from collections import defaultdict
+import random
 
 st.set_page_config(
     page_title="Camp Carysbrook · Staff Scheduler",
@@ -237,7 +238,7 @@ def normalise(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def schedule(df: pd.DataFrame, num_days: int, days_per: int, max_per_day: int = None) -> pd.DataFrame:
+def schedule(df: pd.DataFrame, num_days: int, days_per: int, max_per_day: int = None, seed: int=None) -> pd.DataFrame:
     counselors = df["Name"].tolist()
     days = list(range(1, num_days + 1))
     n = len(counselors)
@@ -284,15 +285,15 @@ def schedule(df: pd.DataFrame, num_days: int, days_per: int, max_per_day: int = 
             for d in days:
                 prob += pulp.lpSum(x[idx, d] for idx in members) <= cap
 
-    ages = df["Age"].tolist()
-    max_age = max(ages) if ages else 0
-    seniors = [i for i in range(n) if ages[i] >= max_age - 2]
-    if seniors:
-        peak = pulp.LpVariable("peak_seniors", lowBound=0)
-        for d in days:
-            prob += pulp.lpSum(x[i, d] for i in seniors) <= peak
-        prob += peak
 
+    # Randomized objective to allow different valid schedules
+    rng = random.Random(seed)
+    
+    prob += pulp.lpSum(
+        rng.uniform(0, 0.01) * x[i, d]
+        for i in range(n)
+        for d in days
+    )
     solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=60)
     prob.solve(solver)
 
@@ -484,16 +485,136 @@ if df_raw is not None:
         st.dataframe(df_raw, use_container_width=True)
 
     st.write("")
-    if st.button("🗓️ Generate Schedule", type="primary", use_container_width=True):
-        df = normalise(df_raw)
-        with st.spinner("Finding the best schedule…"):
-            try:
-                result = schedule(df, num_days=num_days, days_per=days_per, max_per_day=max_per_day)
-            except RuntimeError as e:
-                st.error(str(e))
-                st.stop()
+    # Store generated schedule between reruns
+    if "schedule_result" not in st.session_state:
+        st.session_state.schedule_result = None
+    
+    st.write("")
+    
+    col_gen, col_shuffle = st.columns(2)
 
-        st.success("Schedule generated!")
+generate_clicked = col_gen.button(
+    "🗓️ Generate Schedule",
+    type="primary",
+    use_container_width=True
+)
+
+shuffle_clicked = col_shuffle.button(
+    "🔀 Shuffle Schedule",
+    use_container_width=True
+)
+
+if generate_clicked or shuffle_clicked:
+
+    df = normalise(df_raw)
+
+    seed = random.randint(1, 1_000_000)
+
+    with st.spinner(
+        "Generating new schedule..."
+        if shuffle_clicked
+        else "Finding the best schedule..."
+    ):
+        try:
+            result = schedule(
+                df,
+                num_days=num_days,
+                days_per=days_per,
+                max_per_day=max_per_day,
+                seed=seed
+            )
+        except RuntimeError as e:
+            st.error(str(e))
+            st.stop()
+
+    st.session_state.schedule_result = result
+
+result = st.session_state.schedule_result
+
+if result is not None:
+
+    st.success("Schedule generated!")
+
+    issues = validate(result)
+
+    if issues:
+        with st.expander("⚠️ Constraint warnings", expanded=True):
+            for issue in issues:
+                st.warning(issue)
+    else:
+        st.info("✅ All cabin, activity, and leadership constraints satisfied.")
+
+    days_sorted = sorted(result["Day Off"].dropna().unique())
+
+    palette = {
+        int(d): DAY_COLOURS[i % len(DAY_COLOURS)]
+        for i, d in enumerate(days_sorted)
+    }
+
+    st.markdown("### 📊 Counselors off per day")
+
+    counts = result.groupby("Day Off")["Name"].count().reset_index()
+    counts.columns = ["Day", "Counselors Off"]
+
+    st.bar_chart(
+        counts.set_index("Day"),
+        color="#2D5A27"
+    )
+
+    st.markdown("### 📅 Full Schedule")
+
+    display_cols = [
+        "Name",
+        "Cabin",
+        "Leadership",
+        "Activity1",
+        "Activity2",
+        "Age",
+        "Day Off"
+    ]
+
+    styled = (
+        result[display_cols]
+        .style
+        .apply(colour_row, palette=palette, axis=1)
+        .set_properties(**{"font-size": "13px"})
+    )
+
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        height=600
+    )
+
+    st.markdown("### ⬇️ Download")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        csv_bytes = result[display_cols].to_csv(index=False).encode()
+
+        st.download_button(
+            "Download as CSV",
+            csv_bytes,
+            file_name="carysbrook_day_off_schedule.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+    with col2:
+        try:
+            xl_bytes = to_excel(result)
+
+            st.download_button(
+                "Download as Excel (colour-coded)",
+                xl_bytes,
+                file_name="carysbrook_day_off_schedule.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
+        except ImportError:
+            st.warning("Install `openpyxl` for Excel export.")
 
         issues = validate(result)
         if issues:
