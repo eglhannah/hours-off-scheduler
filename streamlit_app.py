@@ -493,159 +493,106 @@ if df_raw is not None:
     
     col_gen, col_shuffle = st.columns(2)
 
-generate_clicked = col_gen.button(
-    "🗓️ Generate Schedule",
-    type="primary",
-    use_container_width=True
-)
-
-shuffle_clicked = col_shuffle.button(
-    "🔀 Shuffle Schedule",
-    use_container_width=True
-)
-
-if generate_clicked or shuffle_clicked:
-
-    df = normalise(df_raw)
-
-    seed = random.randint(1, 1_000_000)
-
-    with st.spinner(
-        "Generating new schedule..."
-        if shuffle_clicked
-        else "Finding the best schedule..."
-    ):
-        try:
-            result = schedule(
-                df,
-                num_days=num_days,
-                days_per=days_per,
-                max_per_day=max_per_day,
-                seed=seed
-            )
-        except RuntimeError as e:
-            st.error(str(e))
-            st.stop()
-
-    st.session_state.schedule_result = result
-
-result = st.session_state.schedule_result
-
-if result is not None:
-
-    st.success("Schedule generated!")
-
-    issues = validate(result)
-
-    if issues:
-        with st.expander("⚠️ Constraint warnings", expanded=True):
-            for issue in issues:
-                st.warning(issue)
-    else:
-        st.info("✅ All cabin, activity, and leadership constraints satisfied.")
-
-    days_sorted = sorted(result["Day Off"].dropna().unique())
-
-    palette = {
-        int(d): DAY_COLOURS[i % len(DAY_COLOURS)]
-        for i, d in enumerate(days_sorted)
-    }
-
-    st.markdown("### 📊 Counselors off per day")
-
-    counts = result.groupby("Day Off")["Name"].count().reset_index()
-    counts.columns = ["Day", "Counselors Off"]
-
-    st.bar_chart(
-        counts.set_index("Day"),
-        color="#2D5A27"
+    generate_clicked = col_gen.button(
+        "🗓️ Generate Schedule",
+        type="primary",
+        use_container_width=True
     )
-
-    st.markdown("### 📅 Full Schedule")
-
-    display_cols = [
-        "Name",
-        "Cabin",
-        "Leadership",
-        "Activity1",
-        "Activity2",
-        "Age",
-        "Day Off"
-    ]
-
-    styled = (
-        result[display_cols]
-        .style
-        .apply(colour_row, palette=palette, axis=1)
-        .set_properties(**{"font-size": "13px"})
+    
+    shuffle_clicked = col_shuffle.button(
+        "🔀 Shuffle Schedule",
+        use_container_width=True
     )
+    
+    if generate_clicked or shuffle_clicked:
+    
+        df = normalise(df_raw)
+    
+        seed = random.randint(1, 1_000_000)
+    
+        with st.spinner(
+            "Generating new schedule..."
+            if shuffle_clicked
+            else "Finding the best schedule..."
+        ):
+            try:
+                result = schedule(
+                    df,
+                    num_days=num_days,
+                    days_per=days_per,
+                    max_per_day=max_per_day,
+                    seed=seed
+                )
+            except RuntimeError as e:
+                st.error(str(e))
+                st.stop()
+    
+        st.session_state.schedule_result = result
+    
+    result = st.session_state.schedule_result
 
-    st.dataframe(
-        styled,
-        use_container_width=True,
-        height=600
-    )
-
-    st.markdown("### ⬇️ Download")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        csv_bytes = result[display_cols].to_csv(index=False).encode()
-
-        st.download_button(
-            "Download as CSV",
-            csv_bytes,
-            file_name="carysbrook_day_off_schedule.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-    with col2:
-        try:
-            xl_bytes = to_excel(result)
-
-            st.download_button(
-                "Download as Excel (colour-coded)",
-                xl_bytes,
-                file_name="carysbrook_day_off_schedule.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-
-        except ImportError:
-            st.warning("Install `openpyxl` for Excel export.")
-
+    if result is not None:
+    
+        st.success("Schedule generated!")
+    
         issues = validate(result)
+    
         if issues:
             with st.expander("⚠️ Constraint warnings", expanded=True):
                 for issue in issues:
                     st.warning(issue)
         else:
             st.info("✅ All cabin, activity, and leadership constraints satisfied.")
-
+    
         days_sorted = sorted(result["Day Off"].dropna().unique())
-        palette = {int(d): DAY_COLOURS[i % len(DAY_COLOURS)] for i, d in enumerate(days_sorted)}
-
+    
+        palette = {
+            int(d): DAY_COLOURS[i % len(DAY_COLOURS)]
+            for i, d in enumerate(days_sorted)
+        }
+    
         st.markdown("### 📊 Counselors off per day")
+    
         counts = result.groupby("Day Off")["Name"].count().reset_index()
         counts.columns = ["Day", "Counselors Off"]
-        st.bar_chart(counts.set_index("Day"), color="#2D5A27")
-
+    
+        st.bar_chart(
+            counts.set_index("Day"),
+            color="#2D5A27"
+        )
+    
         st.markdown("### 📅 Full Schedule")
-        display_cols = ["Name", "Cabin", "Leadership", "Activity1", "Activity2", "Age", "Day Off"]
+    
+        display_cols = [
+            "Name",
+            "Cabin",
+            "Leadership",
+            "Activity1",
+            "Activity2",
+            "Age",
+            "Day Off"
+        ]
+    
         styled = (
             result[display_cols]
             .style
             .apply(colour_row, palette=palette, axis=1)
             .set_properties(**{"font-size": "13px"})
         )
-        st.dataframe(styled, use_container_width=True, height=600)
+    
+        st.dataframe(
+            styled,
+            use_container_width=True,
+            height=600
+        )
 
         st.markdown("### ⬇️ Download")
+    
         col1, col2 = st.columns(2)
+    
         with col1:
             csv_bytes = result[display_cols].to_csv(index=False).encode()
+    
             st.download_button(
                 "Download as CSV",
                 csv_bytes,
@@ -653,9 +600,11 @@ if result is not None:
                 mime="text/csv",
                 use_container_width=True,
             )
+    
         with col2:
             try:
                 xl_bytes = to_excel(result)
+    
                 st.download_button(
                     "Download as Excel (colour-coded)",
                     xl_bytes,
@@ -663,8 +612,59 @@ if result is not None:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
+    
             except ImportError:
                 st.warning("Install `openpyxl` for Excel export.")
+    
+            issues = validate(result)
+            if issues:
+                with st.expander("⚠️ Constraint warnings", expanded=True):
+                    for issue in issues:
+                        st.warning(issue)
+            else:
+                st.info("✅ All cabin, activity, and leadership constraints satisfied.")
+    
+            days_sorted = sorted(result["Day Off"].dropna().unique())
+            palette = {int(d): DAY_COLOURS[i % len(DAY_COLOURS)] for i, d in enumerate(days_sorted)}
+    
+            st.markdown("### 📊 Counselors off per day")
+            counts = result.groupby("Day Off")["Name"].count().reset_index()
+            counts.columns = ["Day", "Counselors Off"]
+            st.bar_chart(counts.set_index("Day"), color="#2D5A27")
+    
+            st.markdown("### 📅 Full Schedule")
+            display_cols = ["Name", "Cabin", "Leadership", "Activity1", "Activity2", "Age", "Day Off"]
+            styled = (
+                result[display_cols]
+                .style
+                .apply(colour_row, palette=palette, axis=1)
+                .set_properties(**{"font-size": "13px"})
+            )
+            st.dataframe(styled, use_container_width=True, height=600)
+    
+            st.markdown("### ⬇️ Download")
+            col1, col2 = st.columns(2)
+            with col1:
+                csv_bytes = result[display_cols].to_csv(index=False).encode()
+                st.download_button(
+                    "Download as CSV",
+                    csv_bytes,
+                    file_name="carysbrook_day_off_schedule.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            with col2:
+                try:
+                    xl_bytes = to_excel(result)
+                    st.download_button(
+                        "Download as Excel (colour-coded)",
+                        xl_bytes,
+                        file_name="carysbrook_day_off_schedule.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+                except ImportError:
+                    st.warning("Install `openpyxl` for Excel export.")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
