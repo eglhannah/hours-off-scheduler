@@ -268,22 +268,36 @@ def schedule(df: pd.DataFrame, num_days: int, days_per: int, max_per_day: int = 
         for col in ["Activity1", "Activity2"]:
             if row[col]:
                 act_groups[row[col]].add(i)
+    EXEMPT_ACTIVITIES = {
+    "barn",
+    "horseback riding",
+    "riding"
+    }
+    
     for act, members in act_groups.items():
         members = list(members)
-        if len(members) > 1:
-            cap = max(1, len(members) // 2)
-            for d in days:
-                prob += pulp.lpSum(x[idx, d] for idx in members) <= cap
-
-    lead_groups = defaultdict(list)
-    for i, row in df.iterrows():
-        if row["Leadership"]:
-            lead_groups[row["Leadership"]].append(i)
-    for role, members in lead_groups.items():
-        if len(members) > 1:
-            cap = max(1, len(members) // 2)
-            for d in days:
-                prob += pulp.lpSum(x[idx, d] for idx in members) <= cap
+    
+        if len(members) <= 1:
+            continue
+    
+        # Skip activity cap for riding staff
+        if act.strip().lower() in EXEMPT_ACTIVITIES:
+            continue
+    
+        cap = max(1, len(members) // 2)
+    
+        for d in days:
+            prob += pulp.lpSum(x[idx, d] for idx in members) <= cap
+    
+        lead_groups = defaultdict(list)
+        for i, row in df.iterrows():
+            if row["Leadership"]:
+                lead_groups[row["Leadership"]].append(i)
+        for role, members in lead_groups.items():
+            if len(members) > 1:
+                cap = max(1, len(members) // 2)
+                for d in days:
+                    prob += pulp.lpSum(x[idx, d] for idx in members) <= cap
 
 
     # Randomized objective to allow different valid schedules
